@@ -1,0 +1,46 @@
+{
+    "calendars": {
+        "my-first-calendar":  "abc123@group.calendar.google.com",
+        "my-second-calendar": "abc321@group.calendar.google.com"
+    },
+    "spreadsheets": {
+        "my-first-spreadsheet": "abcdefg",
+        "my-second-spreadsheet": "1234567"
+    },
+    "variables": {
+        "my-first-var": [ "my-first-spreadsheet", "Sheet Name", 1 ],
+        "my-second-var": [ "my-second-spreadsheet", "Another Sheet Name", 4 ]
+    },
+    "commonEvents": [
+        {
+            "calendar": "my-first-calendar",
+            "summary": "Event Summary {{ my-first-var }}",
+            "description": "Conditional\n{{ if my-first-var }}My first var: {{ my-first-var }}{{ end }}",
+            "location": "Street 1, City"
+            "duration": 6300
+        },
+        {
+            "calendar": "my-second-calendar",
+            "summary": "Meeting",
+            "description": "Important meeting in specific place",
+            "location": "{{ my-second-var }}",
+            "duration": 600
+        }
+    ],
+    "clientSecret": "client_secret.json",
+    "default": {
+        "columns": {
+            "time": 0
+        }
+    },
+    "timeParsing": {
+        "regExp": "(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4}) klo (\\d{1,2})\\.(\\d{1,2})\\.(\\d{1,2})",
+        "format": [ "day", "month", "year", "hour", "min", "sec" ]
+    },
+    "calendar": {
+        "eventSource": {
+            "title": "Sheet To Cal",
+            "url": "http://github.com/iqqmuT/sheet-to-cal"
+        }
+    }
+}
