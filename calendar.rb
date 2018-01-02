@@ -194,7 +194,7 @@ class Calendar
                              }
                              )
     if result.response.status != 200
-      STDERR.puts "ERROR: Could not delete event from calendar '#{calendar_id}': #{result.data.error}"
+      STDERR.puts "ERROR: Could not delete event from calendar '#{calendar_id}': #{result.response.status}"
     end
   end
 
