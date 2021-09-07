@@ -129,9 +129,9 @@ class Calendar
 
   # Returns true if events have same summary and description
   def _events_data_is_equal(cal_event, new_event)
-    cal_event.summary == new_event['summary'] &&
-      cal_event.description == new_event['description'] &&
-      cal_event.location == new_event['location']
+    cal_event.summary == new_event.summary &&
+      cal_event.description == new_event.description &&
+      cal_event.location == new_event.location
   end
 
   def _convert_to_calendar_time(time)

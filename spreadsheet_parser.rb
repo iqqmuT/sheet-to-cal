@@ -2,6 +2,7 @@
 
 # https://developers.google.com/sheets/api/quickstart/ruby
 # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/get
+# https://googleapis.dev/ruby/google-api-client/latest/Google/Apis/SheetsV4/SheetsService.html#get_spreadsheet-instance_method
 
 require "google/apis/sheets_v4"
 require_relative 'authorization'
@@ -30,11 +31,21 @@ class SpreadsheetParser
   # }
   def get_coming_events
     rows = []
-    @sources = _get_sources()
+    @values = _read_values()
 
-    @sources.each do |name,value|
-      value['sheets'].each do |sheet_title|
-        rows += _parse_worksheet(value['spreadsheet'], sheet_title)
+    @values.each do |spreadsheet, worksheet_data|
+      worksheet_data.each do |worksheet, data_rows|
+        data_rows.each do |row|
+          time = _parse_time(row[@cfg['default']['columns']['time']])
+          if time && time > Time.now && _row_contains_data(row)
+            rows << {
+              spreadsheet: spreadsheet,
+              worksheet: worksheet,
+              time: time,
+              values: row,
+            }
+          end
+        end
       end
     end
 
@@ -45,6 +56,8 @@ class SpreadsheetParser
       end
       rows_by_time[row[:time]] << row
     end
+
+    #puts(rows_by_time)
 
     events = []
     @cfg['commonEvents'].each do |commonEvent|
@@ -92,12 +105,12 @@ class SpreadsheetParser
   def _find_variables_by_time(variables_by_time, variable, rows)
     if @cfg['variables'].has_key? variable then
       var_arr = @cfg['variables'][variable]
-      spreadsheet = @sources[var_arr[0]]['spreadsheet']
+      spreadsheet_title = var_arr[0]
 
       rows.each do |row|
         value = row[:values][var_arr[2]]
-        if row[:spreadsheet] == spreadsheet and
-          row[:worksheet].properties.title == var_arr[1] and value != "" then
+        if row[:spreadsheet] == spreadsheet_title and
+          row[:worksheet] == var_arr[1] and value != "" then
           # matching row found
           if not variables_by_time.has_key? row[:time] then
             variables_by_time[row[:time]] = {}
@@ -108,36 +121,6 @@ class SpreadsheetParser
       end
     end
     variables_by_time
-  end
-
-  # format of row:
-  # {
-  #   :spreadsheet => <GoogleDrive::Spreadsheet ... title="Foo">,
-  #   :worksheet => <GoogleDrive::Worksheet ... title="English">,
-  #   :time => 2016-01-06 12:00:00 +0200,
-  #   :values => ["6.1.2016 klo 12.00.00", "Place 1", "Foo"]
-  # }
-  def _parse_worksheet(spreadsheet, sheet_title)
-    rows = []
-    # worksheet = spreadsheet.worksheet_by_title(sheet_title)
-    worksheet = _get_sheet_by_title(spreadsheet, sheet_title)
-    if worksheet && worksheet.data.length > 0 then
-      range = worksheet.data[0] # first data range
-      range.row_data.drop(1).each do |row|
-        if row.values then
-          time = _parse_time(row.values[@cfg['default']['columns']['time']].formatted_value)
-          if time && time > Time.now && _row_contains_data(row)
-            rows << {
-              spreadsheet: spreadsheet,
-              worksheet: worksheet,
-              time: time,
-              values: _read_row_values(row),
-            }
-          end
-        end
-      end
-    end
-    rows
   end
 
   def _read_row_values(row)
@@ -151,8 +134,11 @@ class SpreadsheetParser
   end
 
   def _row_contains_data(row)
-    row.values[1..-1].each do |value|
-      if value && value.formatted_value && value.formatted_value.length > 0 then
+    if row.length < 2 then
+      return false
+    end
+    row[1..-1].each do |value|
+      if value && value.length > 0 then
         return true
       end
       return false
@@ -162,24 +148,6 @@ class SpreadsheetParser
   # Returns Set of variable names found from text
   def _find_variables(text)
     return Set.new
-  end
-
-  # Returns dictionary of all needed spreadsheets and their sheets
-  def _get_sources()
-    sources = {}
-    @cfg['spreadsheets'].each do |name,key|
-      sources[name] = {}
-      # fetch spreadsheet with data
-      sources[name]['spreadsheet'] = @service.get_spreadsheet(key, include_grid_data: true)
-      sources[name]['sheets'] = Set.new
-
-      @cfg['variables'].values.each do |value|
-        if value[0] == name then
-          sources[name]['sheets'].add(value[1])
-        end
-      end
-    end
-    sources
   end
 
   def _parse_time(value)
@@ -209,6 +177,44 @@ class SpreadsheetParser
     end
     # not found
     return nil
+  end
+
+  def _get_sheet_titles()
+    # get list of sheets we need to fetch
+    sheet_titles = {}
+    @cfg['variables'].values.each do |main_title, sheet_title, col|
+      if !sheet_titles.keys.include?(main_title) then
+        sheet_titles[main_title] = { titles: [], cols: 1 }
+      end
+      if !sheet_titles[main_title][:titles].include?(sheet_title) then
+        sheet_titles[main_title][:titles].append(sheet_title)
+      end
+      if col > sheet_titles[main_title][:cols] then
+        sheet_titles[main_title][:cols] = col
+      end
+    end
+    sheet_titles
+  end
+
+  def _read_values()
+    titles = _get_sheet_titles()
+
+    values = {}
+    titles.keys.each do |main_title|
+      id = @cfg['spreadsheets'][main_title]
+      titles[main_title][:titles].each do |sheet_title|
+        # generate range string, start from 2nd row
+        range = sheet_title + '!' + 'A2:' + ((65 + titles[main_title][:cols]).chr) + '100'
+        # read sheet data by range
+        range_values = @service.get_spreadsheet_values(id, range)
+
+        if !values.has_key?(main_title) then
+          values[main_title] = {}
+        end
+        values[main_title][sheet_title] = range_values.values
+      end
+    end
+    values
   end
 
 end
