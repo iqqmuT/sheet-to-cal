@@ -1,39 +1,45 @@
 #!/usr/bin/ruby
 
 require 'rubygems'
-require 'google/api_client'
-require 'google/api_client/client_secrets'
-require 'google/api_client/auth/installed_app'
-require 'google/api_client/auth/storage'
-require 'google/api_client/auth/storages/file_store'
+
+require "google/apis/calendar_v3"
+require "google/apis/sheets_v4"
+require "googleauth"
+require "googleauth/stores/file_token_store"
+
 require 'fileutils'
 
 module Authorization
 
-  CREDENTIALS_PATH = File.join('credentials', 'user.json')
+  # CREDENTIALS_PATH = File.join('credentials', 'token.yaml')
+  TOKEN_PATH = 'credentials/token.yaml'.freeze
+  OOB_URI = "urn:ietf:wg:oauth:2.0:oob".freeze
+  SCOPES = [
+    Google::Apis::CalendarV3::AUTH_CALENDAR_EVENTS,
+    Google::Apis::SheetsV4::AUTH_SPREADSHEETS_READONLY,
+  ]
 
   def self.authorize(client_secrets_file)
-    FileUtils.mkdir_p(File.dirname(CREDENTIALS_PATH))
-
-    file_store = Google::APIClient::FileStore.new(CREDENTIALS_PATH)
-    storage = Google::APIClient::Storage.new(file_store)
-    auth = storage.authorize
-
-    if auth.nil? || (auth.expired? && auth.refresh_token.nil?)
-      app_info = Google::APIClient::ClientSecrets.load(client_secrets_file)
-      flow = Google::APIClient::InstalledAppFlow.new({
-        :client_id => app_info.client_id,
-        :client_secret => app_info.client_secret,
-        :scope => [
-          "https://www.googleapis.com/auth/calendar",
-          "https://www.googleapis.com/auth/drive",
-          "https://spreadsheets.google.com/feeds/"
-        ]
-      })
-      auth = flow.authorize(storage)
-      puts "Credential saved to #{CREDENTIALS_PATH}" unless auth.nil?
+    client_id = Google::Auth::ClientId.from_file client_secrets_file
+    token_store = Google::Auth::Stores::FileTokenStore.new file: TOKEN_PATH
+    authorizer = Google::Auth::UserAuthorizer.new client_id, SCOPES, token_store
+    user_id = "default"
+    credentials = authorizer.get_credentials user_id
+    if credentials.nil?
+      url = authorizer.get_authorization_url base_url: OOB_URI
+      puts "Open the following URL in the browser and enter the " \
+           "resulting code after authorization:\n" + url
+      code = gets
+      credentials = authorizer.get_and_store_credentials_from_code(
+        user_id: user_id, code: code, base_url: OOB_URI
+      )
+      puts "Credentials saved to #{TOKEN_PATH}" unless credentials.nil?
     end
-    auth
+    credentials
+  end
+
+  def self.get_app_name()
+    "Sheet To Cal"
   end
 
 end

@@ -5,7 +5,7 @@
 #
 # Supports if keyword:
 # Begin {{ if variable }} Then show {{ variable }} {{ end }} End
-# 
+#
 # If variable exists with value "foo":
 # Begin Then show foo End
 #
@@ -41,6 +41,9 @@ class ExpressionParser
 
       else
         value = if @vars.key? expression then @vars[expression] else "" end
+        if value == nil then
+          value = ''
+        end
         text.gsub!(match[0], value)
       end
     end

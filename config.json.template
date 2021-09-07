@@ -41,6 +41,7 @@
         "eventSource": {
             "title": "Sheet To Cal",
             "url": "http://github.com/iqqmuT/sheet-to-cal"
-        }
+        },
+        "timeZone": "Europe/Helsinki"
     }
 }

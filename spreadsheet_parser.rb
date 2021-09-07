@@ -1,15 +1,23 @@
 #!/usr/bin/ruby
 
-require 'google_drive'
+# https://developers.google.com/sheets/api/quickstart/ruby
+# https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets/get
+
+require "google/apis/sheets_v4"
+require_relative 'authorization'
 require './expression_finder'
 require './expression_parser'
 
+# for debugging, add 'binding.pry' to breakpoint
+# require 'pry'
+
 class SpreadsheetParser
 
-  def initialize(client, cfg)
-    @client = client
+  def initialize(authorization, app_name, cfg)
     @cfg = cfg
-    @session = GoogleDrive.login_with_oauth(client.authorization.access_token)
+    @service = Google::Apis::SheetsV4::SheetsService.new
+    @service.client_options.application_name = app_name
+    @service.authorization = authorization
   end
 
   # Format of returned events:
@@ -55,7 +63,6 @@ class SpreadsheetParser
     expressions.uniq!
 
     # get all possible times
-    #times = []
     variables_by_time = {}
     expressions.each do |expression|
       _find_variables_by_time(variables_by_time, expression, rows)
@@ -71,6 +78,7 @@ class SpreadsheetParser
       new_event = {
         :calendar => @cfg['calendars'][event['calendar']],
         :time => time,
+        :ends => time + event['duration'],
         :summary => summary,
         :description => description,
         :location => location,
@@ -89,8 +97,7 @@ class SpreadsheetParser
       rows.each do |row|
         value = row[:values][var_arr[2]]
         if row[:spreadsheet] == spreadsheet and
-           row[:worksheet].title == var_arr[1] and
-           value != "" then
+          row[:worksheet].properties.title == var_arr[1] and value != "" then
           # matching row found
           if not variables_by_time.has_key? row[:time] then
             variables_by_time[row[:time]] = {}
@@ -112,21 +119,40 @@ class SpreadsheetParser
   # }
   def _parse_worksheet(spreadsheet, sheet_title)
     rows = []
-    worksheet = spreadsheet.worksheet_by_title(sheet_title)
-    if worksheet && worksheet.rows.length > 1
-      worksheet.rows.drop(1).each do |row|
-        time = _parse_time(row[@cfg['default']['columns']['time']])
-        if time && time > Time.now && _row_contains_data(row)
-          rows << { spreadsheet: spreadsheet, worksheet: worksheet, time: time, values: row }
+    # worksheet = spreadsheet.worksheet_by_title(sheet_title)
+    worksheet = _get_sheet_by_title(spreadsheet, sheet_title)
+    if worksheet && worksheet.data.length > 0 then
+      range = worksheet.data[0] # first data range
+      range.row_data.drop(1).each do |row|
+        if row.values then
+          time = _parse_time(row.values[@cfg['default']['columns']['time']].formatted_value)
+          if time && time > Time.now && _row_contains_data(row)
+            rows << {
+              spreadsheet: spreadsheet,
+              worksheet: worksheet,
+              time: time,
+              values: _read_row_values(row),
+            }
+          end
         end
       end
     end
     rows
   end
 
+  def _read_row_values(row)
+    values = []
+    row.values.each do |cell|
+      if cell then
+        values.append(cell.formatted_value ? cell.formatted_value : '')
+      end
+    end
+    values
+  end
+
   def _row_contains_data(row)
-    row[1..-1].each do |value|
-      if value.length > 0 then
+    row.values[1..-1].each do |value|
+      if value && value.formatted_value && value.formatted_value.length > 0 then
         return true
       end
       return false
@@ -143,7 +169,8 @@ class SpreadsheetParser
     sources = {}
     @cfg['spreadsheets'].each do |name,key|
       sources[name] = {}
-      sources[name]['spreadsheet'] = @session.spreadsheet_by_key(key)
+      # fetch spreadsheet with data
+      sources[name]['spreadsheet'] = @service.get_spreadsheet(key, include_grid_data: true)
       sources[name]['sheets'] = Set.new
 
       @cfg['variables'].values.each do |value|
@@ -155,16 +182,10 @@ class SpreadsheetParser
     sources
   end
 
-  def _get_spreadsheet(cfg)
-    url = cfg['spreadsheetUrl']
-    if url
-      @session.spreadsheet_by_url(url)
-    else
-      nil
-    end
-  end
-
   def _parse_time(value)
+    if value == nil then
+      return nil
+    end
     parse_cfg = @cfg['timeParsing']
     re = Regexp.new(parse_cfg['regExp'])
     matches = value.scan(re)
@@ -178,6 +199,16 @@ class SpreadsheetParser
       tu[unit] = values[i]
     end
     Time.new(tu['year'], tu['month'], tu['day'], tu['hour'], tu['min'], tu['sec'])
+  end
+
+  def _get_sheet_by_title(spreadsheet, title)
+    spreadsheet.sheets.each do |sheet|
+      if sheet.properties.title == title then
+        return sheet
+      end
+    end
+    # not found
+    return nil
   end
 
 end

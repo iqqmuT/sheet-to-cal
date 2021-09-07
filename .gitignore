@@ -35,3 +35,4 @@ build/
 
 config.json
 client_secret.json
+*.swp

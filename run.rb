@@ -2,7 +2,6 @@
 
 require 'bundler/setup'
 require 'json'
-require 'google/api_client'
 require_relative 'authorization'
 require_relative 'spreadsheet_parser'
 require_relative 'calendar'
@@ -16,13 +15,10 @@ if !authorization
   abort("Not authorized")
 end
 
-client = Google::APIClient.new(
-  :application_name => 'Sheet To Cal',
-  :application_version => '1.0.0')
-client.authorization = authorization
+app_name = 'Sheet To Cal'.freeze
 
-parser = SpreadsheetParser.new(client, cfg)
+parser = SpreadsheetParser.new(authorization, app_name, cfg)
 events = parser.get_coming_events
 
-calendar = Calendar.new(client, cfg)
+calendar = Calendar.new(authorization, app_name, cfg)
 calendar.synchronize_coming_events(events)

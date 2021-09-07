@@ -1,11 +1,20 @@
 #!/usr/bin/ruby
 
+# https://developers.google.com/calendar/api/quickstart/ruby
+# https://developers.google.com/calendar/api/guides/create-events
+
+require "google/apis/calendar_v3"
+
+# for debugging, add 'binding.pry' to breakpoint
+# require 'pry'
+
 class Calendar
 
-  def initialize(client, cfg)
-    @client = client
+  def initialize(authorization, app_name, cfg)
     @cfg = cfg
-    @calendar_api = @client.discovered_api('calendar', 'v3')
+    @service = Google::Apis::CalendarV3::CalendarService.new
+    @service.client_options.application_name = app_name
+    @service.authorization = authorization
   end
 
   def synchronize_coming_events(events)
@@ -28,20 +37,18 @@ class Calendar
   def _convert_events(events)
     g_events = []
     events.each do |event|
-      g_event = {}
-      g_event['summary'] = event[:summary]
-      g_event['description'] = event[:description]
-      g_event['location'] = event[:location]
-      g_event['start'] = {
-        'dateTime' => _time_to_google(event[:time])
-      }
-      g_event['end'] = {
-        'dateTime' => _time_to_google(event[:time] + event[:duration])
-      }
-      g_event['source'] = {
-        'title' => @cfg['calendar']['eventSource']['title'],
-        'url' => @cfg['calendar']['eventSource']['url']
-      }
+      source = Google::Apis::CalendarV3::Event::Source.new(
+        title: @cfg['calendar']['eventSource']['title'],
+        url: @cfg['calendar']['eventSource']['url'],
+      )
+      g_event = Google::Apis::CalendarV3::Event.new(
+        summary: event[:summary],
+        location: event[:location],
+        description: event[:description],
+        start: _convert_to_calendar_time(event[:time]),
+        end: _convert_to_calendar_time(event[:ends]),
+        source: source,
+      )
       g_events << g_event
     end
     g_events
@@ -67,42 +74,22 @@ class Calendar
   end
 
   def _get_coming_events(calendar_id)
-    parameters = {
-      'calendarId' => calendar_id,
-      'timeMin' => DateTime.now.to_s
-    }
-    result = @client.execute(:api_method => @calendar_api.events.list,
-                             :parameters => parameters,
-                             :authorization => @client.authorization.dup)
-
-    if result.response.status != 200
-      STDERR.puts "ERROR: Could not read events from calendar '#{calendar_id}': #{result.data.error}"
-    end
+    result = @service.list_events(
+      calendar_id,
+      single_events: true,
+      order_by: 'startTime',
+      time_min: DateTime.now.to_s,
+    )
 
     # filter only events that are created by this script
     events = []
-    result.data.items.each do |event|
+    result.items.each do |event|
       if event.source && event.source.title == @cfg['calendar']['eventSource']['title']
         events << event
       end
     end
     events
   end
-
-  # Convert Time object to '2011-06-03T10:25:00.000-07:00'
-  def _time_to_google(time)
-    s = time.strftime("%Y-%m-%dT%H:%M:%S.000%z")
-    s[0..25] + ':' + s[26..27]
-  end
-
-  # Convert Google dateTime '2011-06-03T10:25:00.000-07:00' to Time
-  # object
-  def _google_to_time(dt)
-    d = elems[0].content.split('.')
-    t = elems[2].content.split(':')
-    Time.new('20' + d[2], d[1], d[0], t[0], t[1])
-  end
-
 
   def _synchronize(new_events, cal_events, calendar_id)
     # update or create calendar events
@@ -137,9 +124,7 @@ class Calendar
 
   # Returns true if events start at the same time and they have same source
   def _events_match(e1, e2)
-    e1 = _make_hash(e1)
-    e2 = _make_hash(e2)
-    e1['source'] && e2['source'] && e1['source']['title'] === e2['source']['title'] && e1['_start'] == e2['_start']
+    e1.source && e2.source && e1.source.title == e2.source.title && e1.start.date_time.to_s == e2.start.date_time.to_s
   end
 
   # Returns true if events have same summary and description
@@ -149,59 +134,33 @@ class Calendar
       cal_event.location == new_event['location']
   end
 
-  def _make_hash(event)
-    if event != Hash
-      event = event.to_hash
-      event['_start'] = DateTime.parse(event['start']['dateTime'])
-    end
-    event
+  def _convert_to_calendar_time(time)
+    # Google wants timestamp in format '2015-05-28T17:00:00-07:00'
+    s = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    # add ':' to timezone
+    s = s[0..21] + ':' + s[22..23]
+
+    cal_time = Google::Apis::CalendarV3::EventDateTime.new(
+      date_time: s,
+      time_zone: @cfg['calendar']['timeZone'],
+    )
+    cal_time
   end
 
   def _insert_event(event, calendar_id)
-    puts "INSERT event " + event['start']['dateTime'].to_s
-     # Fetch list of events on the user's default calandar
-    result = @client.execute(:api_method => @calendar_api.events.insert,
-                             :parameters => {'calendarId' => calendar_id},
-                             :body => JSON.dump(event),
-                             :headers => { 'Content-Type' => 'application/json' },
-                             :authorization => @client.authorization.dup)
-    if result.response.status != 200
-      STDERR.puts "ERROR: Could not insert event to calendar '#{calendar_id}': #{result.data.error}"
-    end
+    puts "INSERT event " + event.start.date_time.to_s
+    @service.insert_event(calendar_id, event)
   end
 
   def _update_event(cal_event, new_event, calendar_id)
-    puts "UPDATE event " + cal_event.start.dateTime.to_s
-    result = @client.execute(:api_method => @calendar_api.events.update,
-                             :parameters => {
-                              'calendarId' => calendar_id,
-                              'eventId' => cal_event.id
-                             },
-                             :body_object => new_event,
-                             :headers => { 'Content-Type' => 'application/json' },
-                             :authorization => @client.authorization.dup)
-    if result.response.status != 200
-      STDERR.puts "ERROR: Could not update event in calendar '#{calendar_id}': #{result.data.error}"
-    end
+    puts "UPDATE event " + cal_event.start.date_time.to_s
+    @service.update_event(calendar_id, cal_event.id, new_event)
   end
 
   def _delete_event(event, calendar_id)
-    puts "DELETE event " + event.start.dateTime.to_s
-    result = @client.execute(:api_method => @calendar_api.events.delete,
-                             :parameters => {
-                              'calendarId' => calendar_id,
-                              'eventId' => event.id
-                             }
-                             )
-    if result.response.status != 200
-      STDERR.puts "ERROR: Could not delete event from calendar '#{calendar_id}': #{result.response.status}"
-    end
-  end
-
-  # Convert Time object to '2011-06-03T10:25:00.000-07:00'
-  def _time_to_google(time)
-    s = time.strftime("%Y-%m-%dT%H:%M:%S.000%z")
-    s[0..25] + ':' + s[26..27]
+    puts "DELETE event " + event.start.date_time.to_s
+    @service.delete_event(calendar_id, event.id)
+    # STDERR.puts "ERROR: Could not delete event from calendar '#{calendar_id}': #{result.response.status}"
   end
 
   def _get_meeting_cfg(meeting)
