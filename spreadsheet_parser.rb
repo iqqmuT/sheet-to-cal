@@ -204,7 +204,7 @@ class SpreadsheetParser
       id = @cfg['spreadsheets'][main_title]
       titles[main_title][:titles].each do |sheet_title|
         # generate range string, start from 2nd row
-        range = sheet_title + '!' + 'A2:' + ((65 + titles[main_title][:cols]).chr) + '100'
+        range = sheet_title + '!' + 'A2:' + ((65 + titles[main_title][:cols]).chr) + "#{@cfg['readRows']}"
         # read sheet data by range
         range_values = @service.get_spreadsheet_values(id, range)
 

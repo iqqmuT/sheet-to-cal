@@ -33,6 +33,7 @@
             "time": 0
         }
     },
+    "readRows": 256,
     "timeParsing": {
         "regExp": "(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4}) klo (\\d{1,2})\\.(\\d{1,2})\\.(\\d{1,2})",
         "format": [ "day", "month", "year", "hour", "min", "sec" ]
