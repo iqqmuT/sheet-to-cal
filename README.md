@@ -15,6 +15,29 @@ Run `ruby run.rb`
 
 Credentials will be asked and they will be stored to `credentials` directory, so next time they will not be asked.
 
+It's a good idea to make backup from `config.json` and `credentials/` (into Dropbox for example).
+
+### Create Docker image
+
+After you have `credentials/token.yaml` and `config.json` set up:
+
+```shell
+$ docker build -t sheet-to-cal .
+```
+
+### Running periodically
+
+If you have anacron installed (like in Ubuntu), you can create a following script to `/etc/cron.weekly/sheet-to-cal`:
+
+```shell
+#!/bin/sh
+
+set -e
+
+cd INSTALLATION_DIRECTORY
+./run_docker.sh
+```
+
 ## Debugging ##
 
 1. Add `gem 'pry-byebug'` to `Gemfile`
