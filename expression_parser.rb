@@ -27,8 +27,10 @@ class ExpressionParser
       expression = match[1].strip()
       if expression.start_with? "if " then
         new_text = text[match.end(0)..-1]
-        drop = !(@vars.key? expression.split(' ')[1])
-        # concat old begin and new text
+        # expression "if var_name" is interpreted false when
+        # var_name does not exist or it has empty value
+        var_name = expression.split(' ')[1]
+        drop = !(@vars.key? var_name and @vars[var_name] != nil and @vars[var_name].length > 0)
         text = text[0..match.begin(0)-1] + parse(new_text, drop)
 
       elsif expression == "end" then
