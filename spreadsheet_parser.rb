@@ -133,16 +133,16 @@ class SpreadsheetParser
     values
   end
 
+  # Returns true if row has any data starting from col B
   def _row_contains_data(row)
-    if row.length < 2 then
-      return false
-    end
-    row[1..-1].each do |value|
-      if value && value.length > 0 then
-        return true
+    if row.length > 1 then
+      row[1..-1].each do |value|
+        if value && value.length > 0 then
+          return true
+        end
       end
-      return false
     end
+    return false
   end
 
   # Returns Set of variable names found from text
