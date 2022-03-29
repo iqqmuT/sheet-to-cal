@@ -35,7 +35,7 @@ If you have anacron installed (like in Ubuntu), you can create a following scrip
 set -e
 
 cd INSTALLATION_DIRECTORY
-./run_docker.sh
+./run_docker.sh 2>&1 /tmp/sheet-to-cal.log
 ```
 
 The script writes log file `/tmp/sheet-to-cal.log`.
