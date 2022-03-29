@@ -38,6 +38,8 @@ cd INSTALLATION_DIRECTORY
 ./run_docker.sh
 ```
 
+The script writes log file `/tmp/sheet-to-cal.log`.
+
 ## Debugging ##
 
 1. Add `gem 'pry-byebug'` to `Gemfile`
