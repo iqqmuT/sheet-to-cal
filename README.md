@@ -39,6 +39,7 @@ cd INSTALLATION_DIRECTORY
 ```
 
 The script writes log file `/tmp/sheet-to-cal.log`.
+You can test if running the script works by `sudo anacron -d -n -f`.
 
 ## Debugging ##
 
